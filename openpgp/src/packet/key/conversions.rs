@@ -283,6 +283,8 @@ macro_rules! create_conversions {
         // combinations where either the KeyParts or the KeyRole does not
         // change.
 
+        // XXX: Should be "f_try" for conversions to SecretParts.
+
         //f!(<PublicParts, PrimaryRole> -> <PublicParts, PrimaryRole>);
         //f!(<PublicParts, PrimaryRole> -> <PublicParts, SubordinateRole>);
         //f!(<PublicParts, PrimaryRole> -> <PublicParts, UnspecifiedRole>);
@@ -428,3 +430,25 @@ create_part_conversions!(ErasedKeyAmalgamation<'a;>);
 create_part_conversions!(ValidPrimaryKeyAmalgamation<'a;>);
 create_part_conversions!(ValidSubordinateKeyAmalgamation<'a;>);
 create_part_conversions!(ValidErasedKeyAmalgamation<'a;>);
+
+#[cfg(test)]
+mod tests {
+    use crate::packet::Key;
+    use crate::packet::key::*;
+
+    #[test]
+    fn invalid_conversions_should_not_compile() {
+        fn _f(k: Key<PublicParts, UnspecifiedRole>)
+              -> Key<SecretParts, PrimaryRole> {
+            k.into()
+        }
+        fn _f(k: Key<PublicParts, UnspecifiedRole>)
+              -> Key<SecretParts, SubordinateRole> {
+            k.into()
+        }
+
+        // ... more illegal PublicParts -> SecretParts conversions if
+        // you also change the role.
+    }
+}
+

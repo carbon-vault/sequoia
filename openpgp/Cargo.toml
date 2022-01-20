@@ -73,6 +73,7 @@ eax = { version = "0.3.0", optional = true }
 ecdsa = { version = "0.11", optional = true, features = ["hazmat", "arithmetic"] } # XXX
 ed25519-dalek = { version = "1", default-features = false, features = ["rand", "u64_backend"], optional = true }
 generic-array = { version = "0.14.4", optional = true }
+hkdf = { version = "0.11", optional = true }
 idea = { version = "0.3.0", optional = true }
 md-5 = { version = "0.9.1", optional = true }
 num-bigint-dig = { version = "0.6", default-features = false, optional = true }
@@ -113,9 +114,10 @@ crypto-rust = [
     "aes", "block-modes", "block-padding", "blowfish", "cast5", "cipher", "des",
     "digest", "eax", "ed25519-dalek", "generic-array", "idea", "md-5", "num-bigint-dig", "rand07",
     "ripemd160", "rsa", "sha-1", "sha2", "twofish", "typenum", "x25519-dalek", "p256",
-    "rand_core", "rand_core/getrandom", "ecdsa"
+    "rand_core", "rand_core/getrandom", "ecdsa", "hkdf"
 ]
-crypto-cng = ["eax", "winapi", "win-crypto-ng", "ed25519-dalek", "num-bigint-dig"]
+crypto-cng = ["eax", "winapi", "win-crypto-ng", "ed25519-dalek", "num-bigint-dig",
+	      "hkdf", "sha2"]
 crypto-openssl = ["openssl", "openssl-sys", "foreign-types-shared"]
 crypto-botan = ["botan"]
 __implicit-crypto-backend-for-tests = []

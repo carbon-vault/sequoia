@@ -1,7 +1,9 @@
 //! Implementation of Sequoia crypto API using the OpenSSL cryptographic library.
 use std::convert::TryFrom;
 
+use crate::Result;
 use crate::types::*;
+use crate::crypto::SessionKey;
 
 pub mod aead;
 pub mod asymmetric;
@@ -20,6 +22,41 @@ pub fn random(buf: &mut [u8]) {
     // This is similar to what other backends do like CNG or Rust
     // see: https://docs.rs/rand/latest/rand/trait.RngCore.html#tymethod.fill_bytes
     openssl::rand::rand_bytes(buf).expect("rand_bytes to work");
+}
+
+/// HKDF instantiated with SHA256.
+///
+/// Used to derive message keys from session keys, and key
+/// encapsulating keys from S2K mechanisms.  In both cases, using a
+/// KDF that includes algorithm information in the given `info`
+/// provides key space separation between cipher algorithms and modes.
+///
+/// `salt`, if given, SHOULD be 32 bytes of salt matching the digest
+/// size of the hash function.  If it is not give, 32 zeros are used
+/// instead.
+///
+/// `okm` must not be larger than 255 * 32 (the size of the hash
+/// digest).
+pub fn hkdf_sha256(ikm: &SessionKey, salt: Option<&[u8]>, info: &[u8],
+                   okm: &mut SessionKey)
+                   -> Result<()>
+{
+    use openssl::{
+        md::Md,
+        pkey::Id,
+        pkey_ctx::PkeyCtx,
+    };
+
+    let mut pkey = PkeyCtx::new_id(Id::HKDF)?;
+    pkey.derive_init()?;
+    pkey.set_hkdf_md(Md::sha256())?;
+    pkey.set_hkdf_key(&ikm)?;
+    if let Some(salt) = salt {
+        pkey.set_hkdf_salt(salt)?;
+    }
+    pkey.add_hkdf_info(info)?;
+    pkey.derive(Some(okm))?;
+    Ok(())
 }
 
 impl PublicKeyAlgorithm {

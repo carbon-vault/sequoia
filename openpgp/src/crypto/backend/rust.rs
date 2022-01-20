@@ -1,7 +1,9 @@
 //! Implementation of Sequoia crypto API using pure Rust cryptographic
 //! libraries.
 
+use crate::Result;
 use crate::types::*;
+use crate::crypto::SessionKey;
 
 pub mod aead;
 pub mod asymmetric;
@@ -21,6 +23,30 @@ pub fn random(buf: &mut [u8]) {
     use rand07::RngCore;
 
     OsRng.fill_bytes(buf)
+}
+
+/// HKDF instantiated with SHA256.
+///
+/// Used to derive message keys from session keys, and key
+/// encapsulating keys from S2K mechanisms.  In both cases, using a
+/// KDF that includes algorithm information in the given `info`
+/// provides key space separation between cipher algorithms and modes.
+///
+/// `salt`, if given, SHOULD be 32 bytes of salt matching the digest
+/// size of the hash function.  If it is not give, 32 zeros are used
+/// instead.
+///
+/// `okm` must not be larger than 255 * 32 (the size of the hash
+/// digest).
+pub fn hkdf_sha256(ikm: &SessionKey, salt: Option<&[u8]>, info: &[u8],
+                   okm: &mut SessionKey)
+                   -> Result<()>
+{
+    use hkdf::Hkdf;
+    use sha2::Sha256;
+
+    Ok(Hkdf::<Sha256>::new(salt, &ikm).expand(info, okm)
+       .map_err(|e| crate::Error::InvalidOperation(e.to_string()))?)
 }
 
 impl PublicKeyAlgorithm {

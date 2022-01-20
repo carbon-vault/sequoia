@@ -1,6 +1,10 @@
 //! Implementation of Sequoia crypto API using the Botan cryptographic library.
 
-use crate::types::*;
+use crate::{
+    Result,
+    crypto::SessionKey,
+    types::*,
+};
 
 pub mod aead;
 pub mod asymmetric;
@@ -17,6 +21,41 @@ pub fn backend() -> String {
 pub fn random(buf: &mut [u8]) {
     let mut rng = botan::RandomNumberGenerator::new_system().unwrap();
     rng.fill(buf).unwrap();
+}
+
+/// HKDF instantiated with SHA256.
+///
+/// Used to derive message keys from session keys, and key
+/// encapsulating keys from S2K mechanisms.  In both cases, using a
+/// KDF that includes algorithm information in the given `info`
+/// provides key space separation between cipher algorithms and modes.
+///
+/// `salt`, if given, SHOULD be 32 bytes of salt matching the digest
+/// size of the hash function.  If it is not give, 32 zeros are used
+/// instead.
+///
+/// `okm` must not be larger than 255 * 32 (the size of the hash
+/// digest).
+pub fn hkdf_sha256(ikm: &SessionKey, salt: Option<&[u8]>, info: &[u8],
+                   okm: &mut SessionKey)
+                   -> Result<()>
+{
+    assert!(okm.len() <= 255 * 32);
+
+    const NO_SALT: [u8; 32] = [0; 32];
+    let salt = salt.unwrap_or(&NO_SALT);
+
+    // XXX: It'd be nice to write that directly to `okm`, but botan-rs
+    // does not have such an interface.
+    let okm_heap: SessionKey =
+        botan::kdf("HKDF(SHA-256)", okm.len(), &*ikm, salt, info)?
+        .into();
+
+    // XXX: Now copy the secret.
+    let l = okm.len().min(okm_heap.len());
+    okm[..l].copy_from_slice(&okm_heap[..l]);
+
+    Ok(())
 }
 
 impl PublicKeyAlgorithm {

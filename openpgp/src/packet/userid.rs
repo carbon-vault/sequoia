@@ -777,8 +777,15 @@ impl UserID {
     /// # use openpgp::packet::UserID;
     /// assert_eq!(UserID::from_address(
     ///                "John Smith".into(),
-    ///                None, "boat@example.org")?.value(),
+    ///                None,
+    ///                "boat@example.org")?.value(),
     ///            &b"John Smith <boat@example.org>"[..]);
+    ///
+    /// assert_eq!(UserID::from_address(
+    ///                "John Smith",
+    ///                "Who is Advok?",
+    ///                "boat@example.org")?.value(),
+    ///            &b"John Smith (Who is Advok?) <boat@example.org>"[..]);
     /// # Ok(()) }
     /// ```
     pub fn from_address<O, S>(name: O, comment: O, email: S)
@@ -996,14 +1003,27 @@ mod tests {
     }
 
     #[test]
-    fn decompose() {
-        tracer!(true, "decompose", 0);
+    fn compose_decompose() {
+        tracer!(true, "compose_decompose", 0);
 
         fn c(userid: &str,
              name: Option<&str>, comment: Option<&str>,
              email: Option<&str>, uri: Option<&str>)
             -> bool
         {
+            assert!(email.is_none() || uri.is_none());
+            t!("userid: {}, name: {:?}, comment: {:?}, email: {:?}, uri: {:?}",
+               userid, name, comment, email, uri);
+
+            // Compose.
+            if email.is_some() || uri.is_some() {
+                let uid =
+                    UserID::from_address(name, comment, email.or(uri).unwrap())
+                    .unwrap();
+                assert_eq!(userid.as_bytes(), uid.value());
+            }
+
+            // Decompose.
             match ConventionallyParsedUserID::new(userid) {
                 Ok(puid) => {
                     let good = puid.name() == name

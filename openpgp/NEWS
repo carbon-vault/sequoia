@@ -3,6 +3,9 @@
 #+TITLE: sequoia-openpgp NEWS – history of user-visible changes
 #+STARTUP: content hidestars
 
+* Changes in XXX
+** New functionality
+   - types::AEADAlgorithm::GCM
 * Changes in 1.15.0
 ** New functionality
    - StandardPolicy::accept_hash_property

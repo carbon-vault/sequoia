@@ -94,7 +94,39 @@ impl AEADAlgorithm {
                     ctx,
                     digest_size: self.digest_size()?,
                 }))
-            }
+            },
+            AEADAlgorithm::GCM => {
+                let cipher = match sym_algo {
+                    SymmetricAlgorithm::AES128 => Cipher::aes_128_gcm(),
+                    SymmetricAlgorithm::AES192 => Cipher::aes_192_gcm(),
+                    SymmetricAlgorithm::AES256 => Cipher::aes_256_gcm(),
+                    _ => return Err(Error::UnsupportedSymmetricAlgorithm(sym_algo).into()),
+                };
+                let mut ctx = CipherCtx::new()?;
+                match op {
+                    CipherOp::Encrypt =>
+                        ctx.encrypt_init(Some(cipher), Some(key), None)?,
+
+                    CipherOp::Decrypt =>
+                        ctx.decrypt_init(Some(cipher), Some(key), None)?,
+                }
+                // We have to set the IV length before supplying the
+                // IV.  Otherwise, it will be silently truncated.
+                ctx.set_iv_length(self.nonce_size()?)?;
+                match op {
+                    CipherOp::Encrypt =>
+                        ctx.encrypt_init(None, None, Some(nonce))?,
+
+                    CipherOp::Decrypt =>
+                        ctx.decrypt_init(None, None, Some(nonce))?,
+                }
+                ctx.set_padding(false);
+                ctx.cipher_update(aad, None)?;
+                Ok(Box::new(OpenSslContext {
+                    ctx,
+                    digest_size: self.digest_size()?,
+                }))
+            },
             _ => Err(Error::UnsupportedAEADAlgorithm(*self).into()),
         }
     }

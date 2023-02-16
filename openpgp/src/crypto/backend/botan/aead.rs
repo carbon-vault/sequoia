@@ -33,6 +33,7 @@ impl AEADAlgorithm {
         match self {
             AEADAlgorithm::EAX => Ok("EAX"),
             AEADAlgorithm::OCB => Ok("OCB"),
+            AEADAlgorithm::GCM => Ok("GCM"),
             _ => Err(Error::UnsupportedAEADAlgorithm(self).into()),
         }
     }

@@ -3412,6 +3412,11 @@ mod test {
         test_aead_messages(AEADAlgorithm::OCB)
     }
 
+    #[test]
+    fn aead_gcm() -> Result<()> {
+        test_aead_messages(AEADAlgorithm::GCM)
+    }
+
     fn test_aead_messages(algo: AEADAlgorithm) -> Result<()> {
         if ! algo.is_supported() {
             eprintln!("Skipping because {} is not supported.", algo);

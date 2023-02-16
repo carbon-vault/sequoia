@@ -110,6 +110,51 @@ impl AEADAlgorithm {
                 },
                 _ => Err(Error::UnsupportedSymmetricAlgorithm(sym_algo).into()),
             },
+            AEADAlgorithm::GCM => match sym_algo {
+                SymmetricAlgorithm::AES128 => {
+                    let mut ctx =
+                        aead::Gcm::<cipher::Aes128>::with_key_and_nonce(key, nonce)?;
+                    ctx.update(aad);
+                    Ok(Box::new(ctx))
+                },
+                SymmetricAlgorithm::AES192 => {
+                    let mut ctx =
+                        aead::Gcm::<cipher::Aes192>::with_key_and_nonce(key, nonce)?;
+                    ctx.update(aad);
+                    Ok(Box::new(ctx))
+                },
+                SymmetricAlgorithm::AES256 => {
+                    let mut ctx =
+                        aead::Gcm::<cipher::Aes256>::with_key_and_nonce(key, nonce)?;
+                    ctx.update(aad);
+                    Ok(Box::new(ctx))
+                },
+                SymmetricAlgorithm::Twofish => {
+                    let mut ctx =
+                        aead::Gcm::<cipher::Twofish>::with_key_and_nonce(key, nonce)?;
+                    ctx.update(aad);
+                    Ok(Box::new(ctx))
+                },
+                SymmetricAlgorithm::Camellia128 => {
+                    let mut ctx =
+                        aead::Gcm::<cipher::Camellia128>::with_key_and_nonce(key, nonce)?;
+                    ctx.update(aad);
+                    Ok(Box::new(ctx))
+                },
+                SymmetricAlgorithm::Camellia192 => {
+                    let mut ctx =
+                        aead::Gcm::<cipher::Camellia192>::with_key_and_nonce(key, nonce)?;
+                    ctx.update(aad);
+                    Ok(Box::new(ctx))
+                },
+                SymmetricAlgorithm::Camellia256 => {
+                    let mut ctx =
+                        aead::Gcm::<cipher::Camellia256>::with_key_and_nonce(key, nonce)?;
+                    ctx.update(aad);
+                    Ok(Box::new(ctx))
+                },
+                _ => Err(Error::UnsupportedSymmetricAlgorithm(sym_algo).into()),
+            },
             _ => Err(Error::UnsupportedAEADAlgorithm(*self).into()),
         }
     }

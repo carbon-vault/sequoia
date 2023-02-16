@@ -61,7 +61,7 @@ impl AEADAlgorithm {
     pub(crate) fn is_supported_by_backend(&self) -> bool {
         use self::AEADAlgorithm::*;
         match &self {
-            EAX | OCB
+            EAX | OCB | GCM
                 => true,
             Private(_) | Unknown(_)
                 => false,

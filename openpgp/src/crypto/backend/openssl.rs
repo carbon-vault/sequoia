@@ -63,12 +63,19 @@ impl AEADAlgorithm {
     }
 
     pub(crate) fn is_supported_by_backend(&self) -> bool {
-        *self == AEADAlgorithm::OCB
+        match self {
+            AEADAlgorithm::EAX => false,
+            AEADAlgorithm::OCB => true,
+            AEADAlgorithm::GCM => true,
+            AEADAlgorithm::Private(_) |
+            AEADAlgorithm::Unknown(_) => false,
+        }
     }
 
     #[cfg(test)]
     pub(crate) fn supports_symmetric_algo(&self, algo: &SymmetricAlgorithm) -> bool {
         match &self {
+            AEADAlgorithm::EAX => false,
             AEADAlgorithm::OCB =>
                 match algo {
                     // OpenSSL supports OCB only with AES
@@ -78,7 +85,17 @@ impl AEADAlgorithm {
                     SymmetricAlgorithm::AES256 => true,
                     _ => false,
                 },
-            _ => false
+            AEADAlgorithm::GCM =>
+                match algo {
+                    // OpenSSL supports GCM only with AES
+                    // see: https://wiki.openssl.org/index.php/GCM
+                    SymmetricAlgorithm::AES128 |
+                    SymmetricAlgorithm::AES192 |
+                    SymmetricAlgorithm::AES256 => true,
+                    _ => false,
+                },
+            AEADAlgorithm::Private(_) |
+            AEADAlgorithm::Unknown(_) => false,
         }
     }
 }

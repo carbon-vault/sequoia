@@ -31,8 +31,10 @@ impl PublicKeyAlgorithm {
         #[allow(deprecated)]
         match &self {
             RSAEncryptSign | RSAEncrypt | RSASign | DSA | ECDH | ECDSA | EdDSA
+                | X25519 | Ed25519
                 => true,
             ElGamalEncrypt | ElGamalEncryptSign | Private(_) | Unknown(_)
+                | X448 | Ed448
                 => false,
         }
     }

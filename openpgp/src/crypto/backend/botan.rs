@@ -24,6 +24,7 @@ impl PublicKeyAlgorithm {
         use PublicKeyAlgorithm::*;
         #[allow(deprecated)]
         match &self {
+            X25519 | X448 | Ed25519 | Ed448 |
             RSAEncryptSign | RSAEncrypt | RSASign | DSA | ECDH | ECDSA | EdDSA |
             ElGamalEncrypt | ElGamalEncryptSign
                 => true,

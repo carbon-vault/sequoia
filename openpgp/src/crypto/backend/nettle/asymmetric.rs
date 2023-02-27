@@ -125,6 +125,17 @@ impl Signer for KeyPair {
                 })
             },
 
+            (Ed25519,
+             PublicKey::Ed25519 { a },
+             mpi::SecretKeyMaterial::Ed25519 { x }) => {
+                    let mut sig = [0; ed25519::ED25519_SIGNATURE_SIZE];
+                    ed25519::sign(a, &x[..], digest, &mut sig)?;
+
+                    Ok(mpi::Signature::Ed25519 {
+                        s: Box::new(sig),
+                    })
+            },
+
             (pk_algo, _, _) => Err(Error::InvalidOperation(format!(
                 "unsupported combination of algorithm {:?}, key {:?}, \
                  and secret key {:?}",
@@ -226,12 +237,13 @@ impl<P: key::KeyParts, R: key::KeyRole> Key<P, R> {
             ECDH => crate::crypto::ecdh::encrypt(self.parts_as_public(),
                                                  data),
 
-            RSASign | DSA | ECDSA | EdDSA =>
+            RSASign | DSA | ECDSA | EdDSA | Ed25519 | Ed448 =>
                 Err(Error::InvalidOperation(
                     format!("{} is not an encryption algorithm", self.pk_algo())
                 ).into()),
 
             ElGamalEncrypt | ElGamalEncryptSign |
+            X25519 | X448 |
             Private(_) | Unknown(_) =>
                 Err(Error::UnsupportedPublicKeyAlgorithm(self.pk_algo()).into()),
         }
@@ -312,6 +324,8 @@ impl<P: key::KeyParts, R: key::KeyRole> Key<P, R> {
                 let signature = dsa::Signature::new(r.value(), s.value());
                 ecdsa::verify(&key, digest, &signature)
             },
+            (PublicKey::Ed25519 { a }, Signature::Ed25519 { s }) =>
+                ed25519::verify(a, digest, &s[..])?,
             _ => return Err(Error::MalformedPacket(format!(
                 "unsupported combination of key {} and signature {:?}.",
                 self.pk_algo(), sig)).into()),

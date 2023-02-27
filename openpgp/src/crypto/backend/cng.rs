@@ -30,6 +30,7 @@ impl PublicKeyAlgorithm {
         match &self {
             RSAEncryptSign | RSAEncrypt | RSASign | DSA | ECDH | ECDSA | EdDSA
                 => true,
+            X25519 | X448 | Ed25519 | Ed448 |
             ElGamalEncrypt | ElGamalEncryptSign | Private(_) | Unknown(_)
                 => false,
         }

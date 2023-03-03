@@ -1,5 +1,4 @@
 use std::convert::TryFrom;
-use std::cmp;
 use std::cmp::Ordering;
 use std::borrow::Borrow;
 
@@ -172,27 +171,36 @@ impl TryFrom<&KeyHandle> for Fingerprint {
 
 impl PartialOrd for KeyHandle {
     fn partial_cmp(&self, other: &KeyHandle) -> Option<Ordering> {
-        let a = self.as_bytes();
-        let b = other.as_bytes();
+        let a_bytes = self.as_bytes();
+        let b_bytes = other.as_bytes();
 
-        let l = cmp::min(a.len(), b.len());
-
-        // Do a little endian comparison so that for v4 keys (where
-        // the KeyID is a suffix of the Fingerprint) equivalent KeyIDs
-        // and Fingerprints sort next to each other.
-        for (a, b) in a[a.len()-l..].iter().zip(b[b.len()-l..].iter()) {
-            let cmp = a.cmp(b);
-            if cmp != Ordering::Equal {
-                return Some(cmp);
+        match (self, other) {
+            (KeyHandle::Fingerprint(_), KeyHandle::Fingerprint(_)) => {
+                // Fingerprints uniquely identify a certificate,
+                // otherwise all bets are off.  So, we can do a
+                // straight up comparison.
+                a_bytes.partial_cmp(b_bytes)
             }
-        }
-
-        if a.len() == b.len() {
-            Some(Ordering::Equal)
-        } else {
-            // One (a KeyID) is the suffix of the other (a
-            // Fingerprint).
-            None
+            (a @ KeyHandle::Fingerprint(_), b @ KeyHandle::KeyID(_))
+                | (a @ KeyHandle::KeyID(_), b @ KeyHandle::Fingerprint(_)) => {
+                if KeyID::from(a) == KeyID::from(b) {
+                    // Same key id, but we can't be certain they refer
+                    // to the same certificate, so return None.
+                    None
+                } else {
+                    a_bytes.partial_cmp(b_bytes)
+                }
+            }
+            (KeyHandle::KeyID(_), KeyHandle::KeyID(_)) => {
+                let ord = a_bytes.partial_cmp(b_bytes);
+                if ord == Some(Ordering::Equal) {
+                    // Same key id, but we can't be certain they refer
+                    // to the same certificate, so return None.
+                    None
+                } else {
+                    ord
+                }
+            }
         }
     }
 }

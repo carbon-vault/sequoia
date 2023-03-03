@@ -192,7 +192,7 @@ impl PartialOrd for KeyHandle {
         } else {
             // One (a KeyID) is the suffix of the other (a
             // Fingerprint).
-            None
+            Some(a.len().cmp(&b.len()).reverse())
         }
     }
 }

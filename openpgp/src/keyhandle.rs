@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::cmp;
 use std::cmp::Ordering;
 use std::borrow::Borrow;
 
@@ -173,7 +174,26 @@ impl PartialOrd for KeyHandle {
     fn partial_cmp(&self, other: &KeyHandle) -> Option<Ordering> {
         let a = self.as_bytes();
         let b = other.as_bytes();
-        Some(a.cmp(b))
+
+        let l = cmp::min(a.len(), b.len());
+
+        // Do a little endian comparison so that for v4 keys (where
+        // the KeyID is a suffix of the Fingerprint) equivalent KeyIDs
+        // and Fingerprints sort next to each other.
+        for (a, b) in a[a.len()-l..].iter().zip(b[b.len()-l..].iter()) {
+            let cmp = a.cmp(b);
+            if cmp != Ordering::Equal {
+                return Some(cmp);
+            }
+        }
+
+        if a.len() == b.len() {
+            Some(Ordering::Equal)
+        } else {
+            // One (a KeyID) is the suffix of the other (a
+            // Fingerprint).
+            None
+        }
     }
 }
 
@@ -232,6 +252,10 @@ impl KeyHandle {
     /// fpr1 == keyid and fpr2 == keyid, but fpr1 != fpr2.
     /// ```
     ///
+    /// In these cases (and only these cases) `KeyHandle`'s
+    /// `PartialOrd` implementation returns `None` to correctly
+    /// indicate that a comparison is not possible.
+    ///
     /// This definition of equality makes searching for a given
     /// `KeyHandle` using `PartialEq` awkward.  This function fills
     /// that gap.  It answers the question: given two `KeyHandles`,
@@ -266,23 +290,11 @@ impl KeyHandle {
     pub fn aliases<H>(&self, other: H) -> bool
         where H: Borrow<KeyHandle>
     {
-        let other = other.borrow();
-        if self.partial_cmp(other) == Some(Ordering::Equal) {
-            true
-        } else {
-            match (self, other) {
-                (KeyHandle::Fingerprint(Fingerprint::V4(f)),
-                 KeyHandle::KeyID(KeyID::V4(i)))
-                    | (KeyHandle::KeyID(KeyID::V4(i)),
-                       KeyHandle::Fingerprint(Fingerprint::V4(f))) =>
-                {
-                    // A v4 key ID are the 8 right-most octets of a v4
-                    // fingerprint.
-                    &f[12..] == i
-                },
-                _ => false,
-            }
-        }
+        // This works, because the PartialOrd implementation only
+        // returns None if one value is a fingerprint and the other is
+        // a key id that matches the fingerprint's key id.
+        self.partial_cmp(other.borrow()).unwrap_or(Ordering::Equal)
+            == Ordering::Equal
     }
 
     /// Returns whether the KeyHandle is invalid.

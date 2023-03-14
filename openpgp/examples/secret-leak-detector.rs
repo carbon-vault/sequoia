@@ -1,9 +1,8 @@
-// 2>/dev/null ; cargo build -p sequoia-openpgp --no-default-features --features=allow-experimental-crypto,allow-variable-time-crypto,crypto-$1 --example secret-leak-detector $2 && for t in clean_basecase leak_basecase test_memzero test_libc_memset test_protected test_protected_mpi test_session_key test_encrypted test_password test_ed25519 test_aes_256_encryption test_aes_256_decryption ; do RUST_BACKTRACE=1 target/debug/examples/secret-leak-detector $t ; done ; exit $?
+// 2>/dev/null ; echo '#[no_mangle] pub extern "C" fn free(_: usize) {}' | rustc --crate-name nofree --crate-type cdylib -o nofree.so - && cargo build -p sequoia-openpgp --no-default-features --features=allow-experimental-crypto,allow-variable-time-crypto,crypto-$1 --example secret-leak-detector $2 && for t in clean_basecase leak_basecase test_memzero test_libc_memset test_protected test_protected_mpi test_session_key test_encrypted test_password test_ed25519 test_aes_256_encryption test_aes_256_decryption ; do RUST_BACKTRACE=1 LD_PRELOAD=nofree.so target/debug/examples/secret-leak-detector $t ; done ; exit $?
 //
-// Note: This is a shell script.  Invoke with /bin/sh for best results.
+// Note: This is also a shell script.
 
 use std::{
-    alloc::{alloc, Layout},
     io::{Read, Write},
 };
 
@@ -40,17 +39,6 @@ const N: usize = 1;
 /// The secret to use and scan for.
 const NEEDLE: &[u8] = b"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@";
 const N0: u8 = NEEDLE[0];
-
-/// Tries to prevent memory reuse by allocating but not initializing
-/// some chunks of memory.
-fn spray_uninit() {
-    for _ in 0..32 {
-        unsafe {
-            let layout = Layout::new::<[u8; 32]>();
-            let _ptr = alloc(layout);
-        }
-    }
-}
 
 /// Makes the current program SEGFAULT.
 #[allow(dead_code)]
@@ -215,7 +203,6 @@ fn main() {
         "test_aes_256_encryption" => {
             for _ in 0..(N + 1) / 2 {
                 test_aes_256_encryption().unwrap();
-                spray_uninit();
             }
             scan(&test).unwrap();
             return;
@@ -224,7 +211,6 @@ fn main() {
             let ciphertext = test_aes_256_encryption().unwrap();
             for _ in 0..(N + 1) / 2 {
                 test_aes_256_decryption(&ciphertext).unwrap();
-                spray_uninit();
             }
             scan(&test).unwrap();
             return;
@@ -246,7 +232,6 @@ fn main() {
             "test_ed25519" => test_ed25519(),
             a => panic!("unknown test case {:?}", a),
         }
-        spray_uninit();
     }
 
     scan(&test).unwrap();

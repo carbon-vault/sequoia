@@ -122,7 +122,7 @@ async fn get() -> anyhow::Result<()> {
     // Start server.
     let addr = start_server();
 
-    let mut keyserver = KeyServer::new(&format!("hkp://{}", addr))?;
+    let keyserver = KeyServer::new(&format!("hkp://{}", addr))?;
     let keyid: KeyID = ID.parse()?;
     let key = keyserver.get(keyid).await?;
 
@@ -136,7 +136,7 @@ async fn send() -> anyhow::Result<()> {
     // Start server.
     let addr = start_server();
     eprintln!("{}", format!("hkp://{}", addr));
-    let mut keyserver =
+    let keyserver =
         KeyServer::new(&format!("hkp://{}", addr))?;
     let key = Cert::from_reader(Reader::from_reader(Cursor::new(RESPONSE), None))?;
     keyserver.send(&key).await?;

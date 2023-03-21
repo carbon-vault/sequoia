@@ -76,8 +76,8 @@ const KEYSERVER_ENCODE_SET: &AsciiSet =
 /// For accessing keyservers using HKP.
 pub struct KeyServer {
     client: reqwest::Client,
-    /// The original URI given to the constructor.
-    uri: Url,
+    /// The original URL given to the constructor.
+    url: Url,
     /// The URL we use for the requests.
     request_url: Url,
 }
@@ -91,39 +91,39 @@ impl Default for KeyServer {
 }
 
 impl KeyServer {
-    /// Returns a handle for the given URI.
-    pub fn new(uri: &str) -> Result<Self> {
-	Self::with_client(uri, reqwest::Client::new())
+    /// Returns a handle for the given URL.
+    pub fn new(url: &str) -> Result<Self> {
+	Self::with_client(url, reqwest::Client::new())
     }
 
-    /// Returns a handle for the given URI with a custom `Client`.
-    pub fn with_client(uri: &str, client: reqwest::Client) -> Result<Self> {
-        let uri = reqwest::Url::parse(uri)?;
+    /// Returns a handle for the given URL with a custom `Client`.
+    pub fn with_client(url: &str, client: reqwest::Client) -> Result<Self> {
+        let url = reqwest::Url::parse(url)?;
 
-        let s = uri.scheme();
+        let s = url.scheme();
         match s {
             "hkp" => (),
             "hkps" => (),
-            _ => return Err(Error::MalformedUri.into()),
+            _ => return Err(Error::MalformedUrl.into()),
         }
 
         let request_url =
             format!("{}://{}:{}",
                     match s {"hkp" => "http", "hkps" => "https",
                              _ => unreachable!()},
-                    uri.host().ok_or(Error::MalformedUri)?,
+                    url.host().ok_or(Error::MalformedUrl)?,
                     match s {
-                        "hkp" => uri.port().or(Some(11371)),
-                        "hkps" => uri.port().or(Some(443)),
+                        "hkp" => url.port().or(Some(11371)),
+                        "hkps" => url.port().or(Some(443)),
                         _ => unreachable!(),
                     }.unwrap()).parse()?;
 
-        Ok(KeyServer { client, uri, request_url })
+        Ok(KeyServer { client, url, request_url })
     }
 
     /// Returns the keyserver's base URL.
     pub fn url(&self) -> &reqwest::Url {
-        &self.uri
+        &self.url
     }
 
     /// Retrieves the certificate with the given handle.
@@ -261,9 +261,9 @@ pub enum Error {
     /// Mismatched key handle
     #[error("Mismatched key handle, expected {0}")]
     MismatchedKeyHandle(KeyHandle, Cert),
-    /// A given keyserver URI was malformed.
-    #[error("Malformed URI; expected hkp: or hkps:")]
-    MalformedUri,
+    /// A given keyserver URL was malformed.
+    #[error("Malformed URL; expected hkp: or hkps:")]
+    MalformedUrl,
     /// The server provided malformed data.
     #[error("Malformed response from server")]
     MalformedResponse,
@@ -273,9 +273,9 @@ pub enum Error {
     /// Encountered an unexpected low-level http status.
     #[error("Error communicating with server")]
     HttpStatus(hyper::StatusCode),
-    /// A `hyper::error::UriError` occurred.
-    #[error("URI Error")]
-    UriError(#[from] url::ParseError),
+    /// A `hyper::error::UrlError` occurred.
+    #[error("URL Error")]
+    UrlError(#[from] url::ParseError),
     /// A `http::Error` occurred.
     #[error("http Error")]
     HttpError(#[from] http::Error),
@@ -298,7 +298,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn uris() {
+    fn urls() {
         assert!(KeyServer::new("keys.openpgp.org").is_err());
         assert!(KeyServer::new("hkp://keys.openpgp.org").is_ok());
         assert!(KeyServer::new("hkps://keys.openpgp.org").is_ok());

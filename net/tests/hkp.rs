@@ -11,7 +11,6 @@ use sequoia_openpgp::KeyID;
 use sequoia_openpgp::armor::Reader;
 use sequoia_openpgp::Cert;
 use sequoia_openpgp::parse::Parse;
-use sequoia_net as net;
 use sequoia_net::KeyServer;
 
 const RESPONSE: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -118,14 +117,12 @@ fn start_server() -> SocketAddr {
     addr
 }
 
-const P: net::Policy = net::Policy::Insecure;
-
 #[tokio::test]
 async fn get() -> anyhow::Result<()> {
     // Start server.
     let addr = start_server();
 
-    let mut keyserver = KeyServer::new(P, &format!("hkp://{}", addr))?;
+    let mut keyserver = KeyServer::new(&format!("hkp://{}", addr))?;
     let keyid: KeyID = ID.parse()?;
     let key = keyserver.get(keyid).await?;
 
@@ -140,7 +137,7 @@ async fn send() -> anyhow::Result<()> {
     let addr = start_server();
     eprintln!("{}", format!("hkp://{}", addr));
     let mut keyserver =
-        KeyServer::new(P, &format!("hkp://{}", addr))?;
+        KeyServer::new(&format!("hkp://{}", addr))?;
     let key = Cert::from_reader(Reader::from_reader(Cursor::new(RESPONSE), None))?;
     keyserver.send(&key).await?;
 

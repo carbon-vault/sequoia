@@ -21,10 +21,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use futures_util::{FutureExt, future::{BoxFuture, TryFutureExt}};
-use http::Response;
-use hyper::{Body, Client, Uri};
-use hyper_tls::HttpsConnector;
 
 use openpgp::policy::StandardPolicy;
 use sequoia_openpgp::{
@@ -37,8 +33,7 @@ use sequoia_openpgp::{
     cert::prelude::*,
 };
 
-use super::{Result, Error};
-use super::email::EmailAddress;
+use crate::{Result, Error};
 
 /// WKD variants.
 ///
@@ -109,19 +104,9 @@ impl Url {
     }
 
     /// Returns an [`url::Url`].
-    pub fn to_url<V>(&self, variant: V) -> Result<url::Url>
+    pub fn to_url<V>(&self, variant: V) -> Result<reqwest::Url>
             where V: Into<Option<Variant>> {
-        let url_string = self.build(variant);
-        let url_url = url::Url::parse(url_string.as_str())?;
-        Ok(url_url)
-    }
-
-    /// Returns an [`hyper::Uri`].
-    pub fn to_uri<V>(&self, variant: V) -> Result<Uri>
-            where V: Into<Option<Variant>> {
-        let url_string = self.build(variant);
-        let uri = url_string.as_str().parse::<Uri>()?;
-        Ok(uri)
+        Ok(reqwest::Url::parse(self.build(variant).as_str())?)
     }
 
     /// Returns a [`PathBuf`].
@@ -193,37 +178,6 @@ fn parse_body<S: AsRef<str>>(body: &[u8], email_address: S)
     }
 }
 
-fn get_following_redirects<T>(
-    client: &hyper::client::Client<T>,
-    url: Uri,
-    depth: i32,
-) -> BoxFuture<Result<Response<Body>>>
-where
-    T: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
-{
-    async move {
-        let response = client.get(url).await;
-
-        if depth < 0 {
-            return Err(anyhow::anyhow!("Too many redirects"));
-        }
-
-        if let Ok(ref resp) = response {
-            if resp.status().is_redirection() {
-                let url = resp.headers().get("Location")
-                    .and_then(|value| value.to_str().ok())
-                    .map(|value| value.parse::<Uri>());
-                if let Some(Ok(url)) = url {
-                    return get_following_redirects(client, url, depth - 1).await;
-                }
-            }
-        }
-
-        response.map_err(|err| anyhow::anyhow!(err))
-    }
-    .boxed()
-}
-
 /// Retrieves the Certs that contain userids with a given email address
 /// from a Web Key Directory URL.
 ///
@@ -257,32 +211,31 @@ where
 /// # use sequoia_openpgp::Cert;
 /// # async fn f() -> Result<()> {
 /// let email_address = "foo@bar.baz";
-/// let certs: Vec<Cert> = wkd::get(&email_address).await?;
+/// let certs: Vec<Cert> = wkd::get(&reqwest::Client::new(), &email_address).await?;
 /// # Ok(())
 /// # }
 /// ```
 
 // XXX: Maybe the direct method should be tried on other errors too.
 // https://mailarchive.ietf.org/arch/msg/openpgp/6TxZc2dQFLKXtS0Hzmrk963EteE
-pub async fn get<S: AsRef<str>>(email_address: S) -> Result<Vec<Cert>> {
+pub async fn get<S: AsRef<str>>(c: &reqwest::Client, email_address: S)
+                                -> Result<Vec<Cert>>
+{
     let email = email_address.as_ref().to_string();
     // First, prepare URIs and client.
     let wkd_url = Url::from(&email)?;
 
-    // WKD must use TLS, so build a client for that.
-    let https = HttpsConnector::new();
-    let client = Client::builder().build::<_, hyper::Body>(https);
-    let advanced_uri = wkd_url.to_uri(Variant::Advanced)?;
-    let direct_uri = wkd_url.to_uri(Variant::Direct)?;
-
-    const REDIRECT_LIMIT: i32 = 10;
+    let advanced_uri = wkd_url.to_url(Variant::Advanced)?;
+    let direct_uri = wkd_url.to_url(Variant::Direct)?;
 
     // First, try the Advanced Method.
-    let res = get_following_redirects(&client, advanced_uri, REDIRECT_LIMIT)
+    let res = if let Ok(res) = c.get(advanced_uri).send().await {
+        Ok(res)
+    } else {
         // Fall back to the Direct Method.
-        .or_else(|_| get_following_redirects(&client, direct_uri, REDIRECT_LIMIT))
-        .await?;
-    let body = hyper::body::to_bytes(res.into_body()).await?;
+        c.get(direct_uri).send().await
+    }?;
+    let body = res.bytes().await?;
 
     parse_body(&body, &email)
 }
@@ -404,6 +357,48 @@ impl KeyRing {
     }
 }
 
+/// Stores the local_part and domain of an email address.
+pub(crate) struct EmailAddress {
+    pub(crate) local_part: String,
+    pub(crate) domain: String,
+}
+
+
+impl EmailAddress {
+    /// Returns an EmailAddress from an email address string.
+    ///
+    /// From [draft-koch]:
+    ///
+    ///```text
+    /// To help with the common pattern of using capitalized names
+    /// (e.g. "Joe.Doe@example.org") for mail addresses, and under the
+    /// premise that almost all MTAs treat the local-part case-insensitive
+    /// and that the domain-part is required to be compared
+    /// case-insensitive anyway, all upper-case ASCII characters in a User
+    /// ID are mapped to lowercase.  Non-ASCII characters are not changed.
+    ///```
+    pub(crate) fn from<S: AsRef<str>>(email_address: S) -> Result<Self> {
+        // Ensure that is a valid email address by parsing it and return the
+        // errors that it returns.
+        // This is also done in hagrid.
+        let email_address = email_address.as_ref();
+        let v: Vec<&str> = email_address.split('@').collect();
+        if v.len() != 2 {
+            return Err(Error::MalformedEmail(email_address.into()).into())
+        };
+
+        // Convert domain to lowercase without tailoring, i.e. without taking any
+        // locale into account. See:
+        // https://doc.rust-lang.org/std/primitive.str.html#method.to_lowercase
+        //
+        // Keep the local part as-is as we'll need that to generate WKD URLs.
+        let email = EmailAddress {
+            local_part: v[0].to_string(),
+            domain: v[1].to_lowercase()
+        };
+        Ok(email)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -435,10 +430,10 @@ mod tests {
              stnkabub89rpcphiz4ppbxixkwyt1pic?l=test1";
         let wkd_url = Url::from("test1@example.com").unwrap();
         assert_eq!(expected_url, wkd_url.to_string());
-        assert_eq!(url::Url::parse(expected_url).unwrap(),
+        assert_eq!(reqwest::Url::parse(expected_url).unwrap(),
                    wkd_url.to_url(None).unwrap());
-        assert_eq!(expected_url.parse::<Uri>().unwrap(),
-                   wkd_url.to_uri(None).unwrap());
+        assert_eq!(expected_url.parse::<reqwest::Url>().unwrap(),
+                   wkd_url.to_url(None).unwrap());
 
         // Direct method
         let expected_url =
@@ -446,10 +441,10 @@ mod tests {
              .well-known/openpgpkey/hu/\
              stnkabub89rpcphiz4ppbxixkwyt1pic?l=test1";
         assert_eq!(expected_url, wkd_url.build(Direct));
-        assert_eq!(url::Url::parse(expected_url).unwrap(),
+        assert_eq!(reqwest::Url::parse(expected_url).unwrap(),
                    wkd_url.to_url(Direct).unwrap());
-        assert_eq!(expected_url.parse::<Uri>().unwrap(),
-                   wkd_url.to_uri(Direct).unwrap());
+        assert_eq!(expected_url.parse::<reqwest::Url>().unwrap(),
+                   wkd_url.to_url(Direct).unwrap());
     }
 
     #[test]

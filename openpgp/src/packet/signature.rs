@@ -179,6 +179,24 @@ macro_rules! impl_arbitrary_with_bound {
 
 pub mod subpacket;
 
+use std::sync::Mutex;
+use std::collections::BTreeMap;
+
+/// The type of SIGNATURE_VERIFICATION_CACHE.
+pub type SignatureVerificationCache = BTreeMap<
+    // SHA-256(mpi::Signature),
+    Vec<u8>,
+    // SHA-256(Key.mpis() || \0 || HashAlgorithm || Digest.
+    Vec<u8>>;
+
+lazy_static::lazy_static!{
+    /// A cache of signature verifications.
+    ///
+    /// This is public so that your application can load and save it.
+    pub static ref SIGNATURE_VERIFICATION_CACHE:
+    Mutex<SignatureVerificationCache> = Mutex::new(Default::default());
+}
+
 /// How many seconds to backdate signatures.
 ///
 /// When creating certificates (more specifically, binding
@@ -2683,6 +2701,8 @@ impl Signature {
               R: key::KeyRole,
               D: AsRef<[u8]>,
     {
+        let digest = digest.as_ref();
+
         if let Some(creation_time) = self.signature_creation_time() {
             if creation_time < key.creation_time() {
                 return Err(Error::BadSignature(
@@ -2694,7 +2714,84 @@ impl Signature {
                 "Signature has no creation time subpacket".into()).into());
         }
 
-        let result = key.verify(self.mpis(), self.hash_algo(), digest.as_ref());
+        let result: Result<()> = {
+            use crate::serialize::Marshal;
+
+            let mpis = self.mpis();
+            let hash_algo = self.hash_algo();
+            let key: &Key<key::PublicParts, key::UnspecifiedRole>
+                = key.parts_as_public().role_as_unspecified();
+
+            let params = || -> Option<Vec<u8>> {
+                let mut context = HashAlgorithm::SHA256.context().ok()?;
+                key.mpis().export(&mut context).ok()?;
+                context.update(&[
+                    0u8,
+                    u8::from(hash_algo)
+                ]);
+                context.update(digest);
+                context.into_digest().ok()
+            };
+            let sig_mpis_hash: Option<Vec<u8>> = {
+                if let Ok(mut context) = HashAlgorithm::SHA256.context() {
+                    if let Ok(_) = mpis.export(&mut context) {
+                        context.into_digest().ok()
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+
+            // If we can look in the cache without blocking, then look
+            // in the cache.
+            let result = if let Some(ref sig_mpis_hash) = sig_mpis_hash {
+                if let Ok(cache) = SIGNATURE_VERIFICATION_CACHE.try_lock() {
+                    let r = if let Some(d) = cache.get(sig_mpis_hash) {
+                        if let Some(cache) = params() {
+                            Some(d == &cache)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    // Explicitly drop the lock.
+                    drop(cache);
+                    r
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // We're very careful to not do the verification while we
+            // have the lock.
+            match result {
+                Some(true) => Ok(()),
+                Some(false) => {
+                    Err(Error::BadSignature("Invalid signature".into()).into())
+                }
+                None => {
+                    let result = key.verify(mpis, hash_algo, digest);
+
+                    // Insert it in the cache.
+                    if result.is_ok() {
+                        if let Some(sig_mpis_hash) = sig_mpis_hash {
+                            if let Some(params) = params() {
+                                let mut cache = SIGNATURE_VERIFICATION_CACHE.lock().unwrap();
+                                cache.insert(sig_mpis_hash, params);
+                                drop(cache);
+                            }
+                        }
+                    }
+
+                    result
+                }
+            }
+        };
         if result.is_ok() {
             // Mark information in this signature as authenticated.
 

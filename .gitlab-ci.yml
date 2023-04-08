@@ -52,8 +52,9 @@ bookworm:
   stage: build
   interruptible: true
   image: 192.168.122.1:5000/sequoia-pgp/build-docker-image/bookworm-prebuild:latest
+  before_script:
+    - apt-get update -yqq ; apt-get install mold -yqq
   script:
-    - apt-get update ; apt-get install mold -yqq
     - cargo run --manifest-path openpgp/Cargo.toml --no-default-features --features crypto-nettle,compression --example supported-algorithms
     - $MAKE_TOP test
     - if ! git diff --quiet Cargo.lock ; then echo "Cargo.lock changed.  Please add the change to the corresponding commit." ; git diff ; false ; fi
@@ -70,6 +71,8 @@ bookworm-crypto-rust:
   image: 192.168.122.1:5000/sequoia-pgp/build-docker-image/bookworm-prebuild:latest
   dependencies:
     - codespell
+  before_script:
+    - apt-get update -yqq ; apt-get install mold -yqq
   script:
     - cargo run --manifest-path openpgp/Cargo.toml --no-default-features --features crypto-rust,compression,allow-experimental-crypto,allow-variable-time-crypto --example supported-algorithms
     - cargo test --release --manifest-path openpgp/Cargo.toml --no-default-features --features crypto-rust,compression,allow-experimental-crypto,allow-variable-time-crypto
@@ -85,6 +88,8 @@ bookworm-crypto-openssl:
   image: 192.168.122.1:5000/sequoia-pgp/build-docker-image/bookworm-prebuild:latest
   dependencies:
     - codespell
+  before_script:
+    - apt-get update -yqq ; apt-get install mold -yqq
   script:
     - cargo run --manifest-path openpgp/Cargo.toml --no-default-features --features crypto-openssl,compression --example supported-algorithms
     - cargo test --manifest-path openpgp/Cargo.toml --no-default-features --features crypto-openssl,compression
@@ -120,6 +125,8 @@ bookworm-crypto-botan:
   stage: build
   interruptible: true
   image: 192.168.122.1:5000/sequoia-pgp/build-docker-image/bookworm-prebuild:latest
+  before_script:
+    - apt-get update -yqq ; apt-get install mold -yqq
   script:
     - cargo run --manifest-path openpgp/Cargo.toml --no-default-features --features crypto-botan,compression --example supported-algorithms
     - cargo test --manifest-path openpgp/Cargo.toml --no-default-features --features crypto-botan,compression

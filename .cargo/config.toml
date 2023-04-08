@@ -1,6 +1,7 @@
 [target.'cfg(all())']
 # Note: if the RUSTFLAGS environment variable is set, this will be
 # ignored.
+linker = "clang"
 rustflags = [
           "-Dwarnings",
           "-Aunused-parens",
@@ -9,8 +10,5 @@ rustflags = [
           "-Aclippy::redundant-clone",
           "-Aclippy::try-err",
           "-Aclippy::unnecessary-lazy-evaluations",
+	  "-Clink-arg=-fuse-ld=/usr/bin/mold",
 ]
-
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=/usr/bin/mold"]

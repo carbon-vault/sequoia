@@ -53,6 +53,7 @@ bookworm:
   interruptible: true
   image: 192.168.122.1:5000/sequoia-pgp/build-docker-image/bookworm-prebuild:latest
   script:
+    - apt-get update ; apt-get install mold -yqq
     - cargo run --manifest-path openpgp/Cargo.toml --no-default-features --features crypto-nettle,compression --example supported-algorithms
     - $MAKE_TOP test
     - if ! git diff --quiet Cargo.lock ; then echo "Cargo.lock changed.  Please add the change to the corresponding commit." ; git diff ; false ; fi
